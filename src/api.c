@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <errno.h>
 
 #include "wapiti.h"
 #include "gradient.h"
@@ -209,19 +210,111 @@ void api_save_model(mdl_t *mdl, FILE *file) {
   fclose(file);
 }
 
-/* Silly linker tricks to wrap wapiti's logging calls.  
+
+
+/* Silly tricks to wrap wapiti's logging calls.  
  * 
  * The Makefile uses the --wrap linker flag to route wapiti's logging
- * and error function calls here.
+ * and error function calls to the corresponding __wrap_-fuctions. 
+ *
+ * To make it easier to hook in custom logging functions, the wrapped
+ * functions in turn call the corresponding functions in the logs
+ * array with the log messag as a string. To customize the
+ * info-logger, for example, simply assign logs[INFO] a pointer to
+ * your logging function.
  */
 
-void __wrap_fatal(const char *msg, ...) {  
-  va_list args;
-  fprintf(stderr, "wrapped error: ");
-  va_start(args, msg);
-  vfprintf(stderr, msg, args);
-  va_end(args);
-  fprintf(stderr, "\n");
+/* These are the default logging functions */
+void inf_log(char *msg) {
+  fprintf(stdout, "%s", msg);
+  free(msg);
+}
+void err_log(char *msg) {
+  fprintf(stderr, "err: %s\n", msg);
   exit(EXIT_FAILURE);
+}
+void wrn_log(char *msg) {
+  fprintf(stderr, "wrn: %s\n", msg);
+  exit(EXIT_FAILURE);
+}
 
+/* 4 logging levels. See wapiti src for more info. */
+enum loglvl {
+  FATAL,
+  PFATAL,
+  WARNING,
+  INFO
+};
+void (* logs[4])(char *msg) = {
+  err_log,
+  err_log,
+  wrn_log,
+  inf_log
+};
+
+/* 
+ * Too avoid bloating this with clever allocation logic, log messages
+ * are truncated to 1400 chars. Look, it's 10 tweets!
+ */
+const int MAXLOGMSG = 1400;
+char *OOMMSG = "out of memory\n";
+
+/* 
+ * After fatal log messages the program state should be considered
+ * unknown and no resources are freed.
+ */
+void __wrap_fatal(const char *msg, ...) {
+  va_list args;
+  char *message = malloc(MAXLOGMSG);
+  if (message == NULL) {
+    message = OOMMSG;
+  } else {
+    va_start(args, msg);
+    vsnprintf(message, MAXLOGMSG, msg, args);
+    va_end(args);
+  }  
+  logs[FATAL](message);
+}
+void __wrap_pfatal(const char *msg, ...) {
+  va_list args;
+  const char *err = strerror(errno);
+  char *message = malloc(MAXLOGMSG + strlen(err) + 4);
+  if (message == NULL) {
+    message = OOMMSG;
+  } else {
+    va_start(args, msg);
+    vsnprintf(message, MAXLOGMSG, msg, args);
+    va_end(args);
+	sprintf(message, "\t<%s>", err);
+  }  
+  logs[PFATAL](message);
+}
+
+/* 
+ * Non-fatal log functions don't need to stop execution, and the error
+ * message will be freed after the logs-call 
+ */
+void __wrap_warning(const char *msg, ...) {
+  va_list args;
+  char *message = malloc(MAXLOGMSG);
+  if (message == NULL) {
+    message = OOMMSG;
+  } else {
+    va_start(args, msg);
+    vsnprintf(message, MAXLOGMSG, msg, args);
+    va_end(args);
+  }  
+  logs[WARNING](message);
+}
+void __wrap_info(const char *msg, ...) {
+  va_list args;
+  char *message = malloc(MAXLOGMSG);
+  if (message == NULL) {
+    message = OOMMSG;
+  } else {
+    va_start(args, msg);
+    vsnprintf(message, MAXLOGMSG, msg, args);
+    va_end(args);
+  }  
+  logs[INFO](message);
 }

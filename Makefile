@@ -19,7 +19,7 @@ OBJ=*.o
 libwapiti: $(SRC) $(HDR)
 	@echo "CC: api.c --> libwapiti.so"
 	@$(CC) -fPIC -c $(CFLAGS) -I $(WAPITI_SRC) $(LIBS) $(SRC)
-	@$(CC) -shared -Wl,--wrap,fatal,-soname,libwapiti.so -o libwapiti.so $(OBJ) -lc
+	@$(CC) -shared -Wl,--wrap,fatal,--wrap,pfatal,--wrap,warning,--wrap,info,-soname,libwapiti.so -o libwapiti.so $(OBJ) -lc
 	@rm -f $(OBJ)
 
 install: libwapiti
@@ -30,7 +30,7 @@ install: libwapiti
 libwapiti_debug: $(SRC) $(HDR)
 	@echo "CC: api.c --> libwapiti.so (dbg)"
 	@$(CC) -fPIC -c $(CFLAGS_DBG) -I $(WAPITI_SRC) $(LIBS) $(SRC)
-	@$(CC) -shared -Wl,--wrap,fatal,-soname,libwapiti.so -o libwapiti.so $(OBJ) -lc
+	@$(CC) -shared -Wl,--wrap,fatal,--wrap,pfatal,--wrap,warning,--wrap,info,-soname,libwapiti.so -o libwapiti.so $(OBJ) -lc
 	@rm -f $(OBJ)
 
 install_debug: libwapiti_debug
