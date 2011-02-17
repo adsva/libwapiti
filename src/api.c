@@ -19,6 +19,12 @@
 #include "progress.h"
 #include "trainers.h"
 
+
+/* 
+ * Redeclarations of necessary unexported wapiti data 
+ */
+
+/* Default training algorithm */
 static void trn_auto(mdl_t *mdl) {
 	const int maxiter = mdl->opt->maxiter;
 	mdl->opt->maxiter = 3;
@@ -27,6 +33,7 @@ static void trn_auto(mdl_t *mdl) {
 	trn_lbfgs(mdl);
 }
 
+/* Maps algorithm option to the corresponding training function */
 static const struct {
 	char *name;
 	void (* train)(mdl_t *mdl);
@@ -39,36 +46,8 @@ static const struct {
 };
 static const int trn_cnt = sizeof(trn_lst) / sizeof(trn_lst[0]);
 
-static raw_t *api_str2raw(char *seq) {
-  int size = 32; // Initial number of lines in raw_t
-  int cnt = 0;  
-  char *line;
-  
-  raw_t *raw = xmalloc(sizeof(raw_t) + sizeof(char *) * size);
-  
-  for (line = strtok(seq, "\n") ; line ; line = strtok(NULL, "\n")) {
-    // Make sure there's room and add the line
-    if (cnt == size) {
-      size *= 1.4;
-      raw = xrealloc(raw, sizeof(raw_t) + sizeof(char *) * size);
-    }
-    raw->lines[cnt++] = line;
-  }
-  raw->len = cnt;
-  return raw;
-}
 
-
-mdl_t *api_load_model(char *filename, opt_t *options) {
-  mdl_t *mdl = api_new_model(options, NULL);
-  
-  FILE *file = fopen(filename, "r");
-  if (file == NULL)
-    pfatal("cannot open input model file: %s", filename);
-  mdl_load(mdl, file);
-  return mdl;
-}
-
+/* Initializes model  */
 mdl_t *api_new_model(opt_t *options, char *patterns) {
   mdl_t *mdl = mdl_new(rdr_new(options->maxent));
   mdl->opt = options;
@@ -88,8 +67,19 @@ mdl_t *api_new_model(opt_t *options, char *patterns) {
   return mdl;
 }
 
-/* api_label_seq: 
- *
+/* Initializes a model and loads data from model file */
+mdl_t *api_load_model(char *filename, opt_t *options) {
+  mdl_t *mdl = api_new_model(options, NULL);
+  
+  FILE *file = fopen(filename, "r");
+  if (file == NULL)
+    pfatal("cannot open input model file: %s", filename);
+  mdl_load(mdl, file);
+  return mdl;
+}
+
+
+/* 
  * Splits a raw BIO-formatted string into lines, annotates them and
  * returns a copy of input string with an added label column.
  */
@@ -139,10 +129,7 @@ char *api_label_seq(mdl_t *mdl, char *lines) {
 }
 
 
-/* api_load_patterns:
- *   Compile lines of patterns from given string and store them in the
- *   model's reader
- */
+/* Compiles lines of patterns and stores them in the model */
 void api_load_patterns(mdl_t *mdl, char *lines) {
   rdr_t *rdr = mdl->reader;
   for (char *line = strtok(lines, "\n") ; line ; line = strtok(NULL, "\n")) {
@@ -175,6 +162,7 @@ void api_load_patterns(mdl_t *mdl, char *lines) {
     
 }
 
+/* Adds a sequence of BIO-formatted training data to the model. */
 void api_add_train_seq(mdl_t *mdl, char *lines) {
   dat_t *dat = mdl->train;
   raw_t *raw = api_str2raw(lines);
@@ -188,6 +176,7 @@ void api_add_train_seq(mdl_t *mdl, char *lines) {
   dat->mlen = max(dat->mlen, seq->len);
 }
 
+/* Trains the model on loaded training data. */
 void api_train(mdl_t *mdl) {
 
   // Get the training method
@@ -205,6 +194,7 @@ void api_train(mdl_t *mdl) {
 
 }
 
+/* Saves the model to a file. */
 void api_save_model(mdl_t *mdl, FILE *file) {
   mdl_save(mdl, file);
   fclose(file);
@@ -212,7 +202,32 @@ void api_save_model(mdl_t *mdl, FILE *file) {
 
 
 
-/* Silly tricks to wrap wapiti's logging calls.  
+/* 
+ * Helpers, etc..
+ */
+
+/* Converts a BIO-formatted string to a raw sequence type */
+static raw_t *api_str2raw(char *seq) {
+  int size = 32; // Initial number of lines in raw_t
+  int cnt = 0;  
+  char *line;
+  
+  raw_t *raw = xmalloc(sizeof(raw_t) + sizeof(char *) * size);
+  
+  for (line = strtok(seq, "\n") ; line ; line = strtok(NULL, "\n")) {
+    // Make sure there's room and add the line
+    if (cnt == size) {
+      size *= 1.4;
+      raw = xrealloc(raw, sizeof(raw_t) + sizeof(char *) * size);
+    }
+    raw->lines[cnt++] = line;
+  }
+  raw->len = cnt;
+  return raw;
+}
+
+
+/* Silly tricks to wrap wapiti's logging/error calls.  
  * 
  * The Makefile uses the --wrap linker flag to route wapiti's logging
  * and error function calls to the corresponding __wrap_-fuctions. 
@@ -222,30 +237,34 @@ void api_save_model(mdl_t *mdl, FILE *file) {
  * array with the log messag as a string. To customize the
  * info-logger, for example, simply assign logs[INFO] a pointer to
  * your logging function.
+ * 
  */
 
 /* These are the default logging functions */
 void inf_log(char *msg) {
   fprintf(stdout, "%s", msg);
-  free(msg);
+}
+void wrn_log(char *msg) {
+  fprintf(stderr, "wrn: %s\n", msg);
 }
 void err_log(char *msg) {
   fprintf(stderr, "err: %s\n", msg);
   exit(EXIT_FAILURE);
 }
-void wrn_log(char *msg) {
-  fprintf(stderr, "wrn: %s\n", msg);
-  exit(EXIT_FAILURE);
-}
 
-/* 4 logging levels. See wapiti src for more info. */
+/* 
+ * The 4 logging levels. FATAL and PFATAL are actually more like final
+ * words and and not logging. See wapiti src for more info.
+ */
 enum loglvl {
   FATAL,
   PFATAL,
   WARNING,
   INFO
 };
-void (* logs[4])(char *msg) = {
+
+/* Customize by replacing with logging function pointers */ 
+void (* api_logs[4])(char *msg) = {
   err_log,
   err_log,
   wrn_log,
@@ -261,7 +280,9 @@ char *OOMMSG = "out of memory\n";
 
 /* 
  * After fatal log messages the program state should be considered
- * unknown and no resources are freed.
+ * unknown and no resources are freed. The only reason these wrappers
+ * don't call exit is to allow custom error handlers to quit on their
+ * own terms.
  */
 void __wrap_fatal(const char *msg, ...) {
   va_list args;
@@ -273,7 +294,7 @@ void __wrap_fatal(const char *msg, ...) {
     vsnprintf(message, MAXLOGMSG, msg, args);
     va_end(args);
   }  
-  logs[FATAL](message);
+  api_logs[FATAL](message);
 }
 void __wrap_pfatal(const char *msg, ...) {
   va_list args;
@@ -285,9 +306,10 @@ void __wrap_pfatal(const char *msg, ...) {
     va_start(args, msg);
     vsnprintf(message, MAXLOGMSG, msg, args);
     va_end(args);
-	sprintf(message, "\t<%s>", err);
+    size_t msglen = strlen(message);
+	snprintf(message+msglen, MAXLOGMSG-msglen, " <%s>", err);
   }  
-  logs[PFATAL](message);
+  api_logs[PFATAL](message);
 }
 
 /* 
@@ -304,7 +326,8 @@ void __wrap_warning(const char *msg, ...) {
     vsnprintf(message, MAXLOGMSG, msg, args);
     va_end(args);
   }  
-  logs[WARNING](message);
+  api_logs[WARNING](message);
+  free(message);
 }
 void __wrap_info(const char *msg, ...) {
   va_list args;
@@ -316,5 +339,6 @@ void __wrap_info(const char *msg, ...) {
     vsnprintf(message, MAXLOGMSG, msg, args);
     va_end(args);
   }  
-  logs[INFO](message);
+  api_logs[INFO](message);
+  free(message);
 }
