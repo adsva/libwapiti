@@ -21,6 +21,21 @@
 
 
 /* 
+ * To maintain c99 compatibility..
+ */
+char *strdup(const char *str)
+{
+  char *cpy = NULL;
+  if (str)
+  {
+    cpy = malloc(strlen(str)+1);
+    if (cpy)
+      strcpy(cpy, str);
+  }
+  return cpy;
+}
+
+/* 
  * Redeclarations of necessary unexported wapiti data 
  */
 
@@ -87,6 +102,7 @@ char *api_label_seq(mdl_t *mdl, char *lines) {
 	qrk_t *lbls = mdl->reader->lbl;
 	const size_t N = mdl->opt->nbest;
 
+    size_t lblstrsize = strlen(lines);
     raw_t *raw = api_str2raw(lines);
 	seq_t *seq = rdr_raw2seq(mdl->reader, raw, mdl->opt->check);
 	const int T = seq->len;
@@ -101,11 +117,10 @@ char *api_label_seq(mdl_t *mdl, char *lines) {
 		tag_nbviterbi(mdl, seq, N, (void*)out, scs, (void*)psc);
 
     // Guess the length of the output string
-    size_t lblstrsize = strlen(lines);
     char *lblseq = xmalloc(lblstrsize+1);
     const char *lblstr;
     size_t rowsize;
-    int pos = 0;
+    size_t pos = 0;
 
 	// Build the output string
 	for (size_t n = 0; n < N; n++) {
@@ -123,7 +138,7 @@ char *api_label_seq(mdl_t *mdl, char *lines) {
 	free(scs);
 	free(psc);
 	free(out);
-	free(raw); // Just free the structure, the lines are parts of the input string
+	rdr_freeraw(raw); 
 	rdr_freeseq(seq);
     return lblseq;
 }
@@ -143,9 +158,12 @@ void api_load_patterns(mdl_t *mdl, char *lines) {
   
     line[end] = '\0';
     line[0] = tolower(line[0]);
-        
+
+    // Avoid messing with the original pattern string
+    char *patstr = strdup(line); 
+
     // Compile pattern and add it to the list
-    pat_t *pat = pat_comp(line);
+    pat_t *pat = pat_comp(patstr);
     rdr->npats++;
     switch (line[0]) {
       case 'u': rdr->nuni++; break;
@@ -197,9 +215,12 @@ void api_train(mdl_t *mdl) {
 /* Saves the model to a file. */
 void api_save_model(mdl_t *mdl, FILE *file) {
   mdl_save(mdl, file);
-  fclose(file);
 }
 
+/* Frees all memory used by the model. */
+void api_free_model(mdl_t *mdl) {
+  mdl_free(mdl);
+}
 
 
 /* 
@@ -220,7 +241,7 @@ static raw_t *api_str2raw(char *seq) {
       size *= 1.4;
       raw = xrealloc(raw, sizeof(raw_t) + sizeof(char *) * size);
     }
-    raw->lines[cnt++] = line;
+    raw->lines[cnt++] = strdup(line);
   }
   raw->len = cnt;
   return raw;
@@ -342,3 +363,4 @@ void __wrap_info(const char *msg, ...) {
   api_logs[INFO](message);
   free(message);
 }
+
