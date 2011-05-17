@@ -126,7 +126,8 @@ char *api_label_seq(mdl_t *mdl, char *lines) {
 	for (size_t n = 0; n < N; n++) {
         for (int t = 0; t < T; t++) {
           lblstr = qrk_id2str(lbls, out[t * N + n]);
-          rowsize = strlen(raw->lines[t]) + strlen(lblstr) + 2; // 2 = \t+\n
+          // Size: input line  + \t + label + \n + \0
+          rowsize = strlen(raw->lines[t]) + strlen(lblstr) + 3; 
           if (pos+rowsize > lblstrsize) {
             lblstrsize += rowsize*(T-t);
             lblseq = xrealloc(lblseq, lblstrsize);
