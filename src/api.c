@@ -20,10 +20,8 @@
 #include "trainers.h"
 
 
-/*
- * To maintain c99 compatibility..
- */
-char *strdup(const char *str)
+/* To maintain c99 compatibility.. */
+static char *strdup(const char *str)
 {
   char *cpy = NULL;
   if (str)
@@ -33,6 +31,26 @@ char *strdup(const char *str)
       strcpy(cpy, str);
   }
   return cpy;
+}
+
+/* Converts a BIO-formatted string to a raw sequence type */
+static raw_t *api_str2raw(char *seq) {
+  int size = 32; // Initial number of lines in raw_t
+  int cnt = 0;
+  char *line;
+
+  raw_t *raw = xmalloc(sizeof(raw_t) + sizeof(char *) * size);
+
+  for (line = strtok(seq, "\n") ; line ; line = strtok(NULL, "\n")) {
+    // Make sure there's room and add the line
+    if (cnt == size) {
+      size *= 1.4;
+      raw = xrealloc(raw, sizeof(raw_t) + sizeof(char *) * size);
+    }
+    raw->lines[cnt++] = strdup(line);
+  }
+  raw->len = cnt;
+  return raw;
 }
 
 /*
@@ -240,31 +258,6 @@ void api_save_model(mdl_t *mdl, FILE *file) {
 /* Frees all memory used by the model. */
 void api_free_model(mdl_t *mdl) {
   mdl_free(mdl);
-}
-
-
-/*
- * Helpers, etc..
- */
-
-/* Converts a BIO-formatted string to a raw sequence type */
-static raw_t *api_str2raw(char *seq) {
-  int size = 32; // Initial number of lines in raw_t
-  int cnt = 0;
-  char *line;
-
-  raw_t *raw = xmalloc(sizeof(raw_t) + sizeof(char *) * size);
-
-  for (line = strtok(seq, "\n") ; line ; line = strtok(NULL, "\n")) {
-    // Make sure there's room and add the line
-    if (cnt == size) {
-      size *= 1.4;
-      raw = xrealloc(raw, sizeof(raw_t) + sizeof(char *) * size);
-    }
-    raw->lines[cnt++] = strdup(line);
-  }
-  raw->len = cnt;
-  return raw;
 }
 
 
